@@ -1,7 +1,7 @@
 package com.emyiqing;
 
 import com.beust.jcommander.JCommander;
-import com.emyiqing.core.xss.ServletXSS;
+import com.emyiqing.core.xss.SimpleServletXss;
 import com.emyiqing.dto.Result;
 import com.emyiqing.input.Command;
 import com.emyiqing.input.Logo;
@@ -11,7 +11,6 @@ import com.github.javaparser.ast.CompilationUnit;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -40,7 +39,7 @@ public class Main {
         CompilationUnit compilationUnit = StaticJavaParser.parse(code);
 
         ExecutorService executor = Executors.newFixedThreadPool(5);
-        Future<List<Result>> task = executor.submit(()-> ServletXSS.check(compilationUnit));
+        Future<List<Result>> task = executor.submit(()-> SimpleServletXss.check(compilationUnit));
 
         try {
             List<Result> result = task.get();

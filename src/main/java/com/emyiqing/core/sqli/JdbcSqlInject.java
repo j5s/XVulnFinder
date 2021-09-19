@@ -1,10 +1,13 @@
-package com.emyiqing.core.xss;
+package com.emyiqing.core.sqli;
 
+import com.emyiqing.core.xss.SimpleServletXss;
 import com.emyiqing.dto.Result;
 import com.emyiqing.parser.ParseUtil;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.expr.*;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import org.apache.log4j.Logger;
 
 import java.util.ArrayList;
@@ -14,8 +17,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @SuppressWarnings("all")
-public class ServletXSS {
-    private static Logger logger = Logger.getLogger(ServletXSS.class);
+public class JdbcSqlInject {
+    private static Logger logger = Logger.getLogger(JdbcSqlInject.class);
 
     private static final String SERVLET_REQUEST_IMPORT = "javax.servlet.http.HttpServletRequest";
     private static final String SERVLET_RESPONSE_IMPORT = "javax.servlet.http.HttpServletResponse";
