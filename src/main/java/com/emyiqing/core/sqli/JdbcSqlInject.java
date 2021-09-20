@@ -1,126 +1,103 @@
 package com.emyiqing.core.sqli;
 
-import com.emyiqing.core.xss.SimpleServletXss;
 import com.emyiqing.dto.Result;
 import com.emyiqing.parser.ParseUtil;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
-import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import org.apache.log4j.Logger;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.*;
 
 @SuppressWarnings("all")
 public class JdbcSqlInject {
     private static Logger logger = Logger.getLogger(JdbcSqlInject.class);
 
-    private static final String SERVLET_REQUEST_IMPORT = "javax.servlet.http.HttpServletRequest";
-    private static final String SERVLET_RESPONSE_IMPORT = "javax.servlet.http.HttpServletResponse";
-    private static final String SERVLET_REQUEST_CLASS = "HttpServletRequest";
-    private static final String SERVLET_RESPONSE_CLASS = "HttpServletResponse";
+    private static final String STATEMENT_IMPORT = "java.sql.Statement";
 
     public static List<Result> check(CompilationUnit compilationUnit) {
         List<Result> results = new ArrayList<>();
         // 是否导入servlet依赖
-        boolean imported = ParseUtil.isImported(compilationUnit, SERVLET_REQUEST_IMPORT) &&
-                ParseUtil.isImported(compilationUnit, SERVLET_RESPONSE_IMPORT);
+        boolean imported = ParseUtil.isImported(compilationUnit, STATEMENT_IMPORT);
         if (!imported) {
-            logger.warn("no servlet xss");
+            logger.warn("no jdbc sql inject");
             return results;
         }
+
         compilationUnit.findAll(ClassOrInterfaceDeclaration.class).stream()
                 // 接口和抽象类不考虑
                 .filter(c -> !c.isInterface() && !c.isAbstract()).forEach(c -> {
+                    Map<String, String> globalVar = new HashMap<>();
+                    c.findAll(FieldDeclaration.class).forEach(f -> {
+                        // 全局变量中是否包含Connection（这是常见操作）
+                        if (f.getVariables().get(0).getType().asString().equals("Connection")) {
+                            globalVar.put("Connection", f.getVariables().get(0).getNameAsString());
+                        }
+                    });
                     // 遍历方法，不考虑main方法
                     c.getMethods().stream().filter(m -> !m.getName().asString().equals("main")).forEach(m -> {
-                        // 请求和相应的具体参数
-                        Map<String, String> params = new HashMap();
+                        Map<String, String> methodVar = new HashMap<>();
+                        Map<String, String> paramVar = new HashMap<>();
                         m.getParameters().forEach(p -> {
-                            if (p.getType().asString().equals(SERVLET_RESPONSE_CLASS)) {
-                                params.put("response", p.getName().asString());
-                            }
-                            if (p.getType().asString().equals(SERVLET_REQUEST_CLASS)) {
-                                params.put("request", p.getName().asString());
-                            }
+                            paramVar.put(p.getType().asString(), p.getName().asString());
                         });
-                        // 参数校验
-                        if (params.get("request").equals("") ||
-                                params.get("response").equals("")) {
-                            return;
-                        }
-                        Map<String, String> data = new HashMap<>();
-                        AtomicInteger flag = new AtomicInteger(0);
                         // 遍历方法中的赋值语句
-                        m.findAll(VariableDeclarationExpr.class).forEach(a -> {
-                            // 左值名
-                            String left = a.getVariables().get(0).getNameAsString();
-                            data.put("name", left);
-                            // 遍历赋值语句中的方法调用
-                            a.findAll(MethodCallExpr.class).forEach(am -> {
-                                // 判断是否调用getParameter方法
-                                if (am.getScope().get().toString().equals(params.get("request"))) {
-                                    if (am.getName().asString().equals("getParameter")) {
-                                        flag.getAndIncrement();
-                                    }
-                                }
-                            });
-                            if (flag.get() != 0) {
-                                logger.info("find servlet parameter: " + data.get("name"));
+                        m.findAll(VariableDeclarationExpr.class).forEach(v -> {
+                            String left = v.getVariables().get(0).getNameAsString();
+                            MethodCallExpr next;
+                            if (v.getVariables().get(0).getInitializer().get() instanceof MethodCallExpr) {
+                                next = (MethodCallExpr) v.getVariables().get(0).getInitializer().get();
+                            } else {
+                                return;
                             }
-                        });
-                        // 遍历方法调用
-                        m.findAll(MethodCallExpr.class).forEach(im -> {
-                            if (im.getScope().get().toString().equals(params.get("response"))) {
-                                // 如果调用了response.getWriter
-                                if (im.getName().asString().equals("getWriter")) {
-                                    MethodCallExpr method = (MethodCallExpr) im.getParentNode().get();
-                                    // response.getWriter.print();
-                                    // response.getWriter.write();
-                                    if (method.getName().asString().equals("print") ||
-                                            method.getName().asString().equals("write")) {
-                                        method.findAll(NameExpr.class).forEach(n -> {
-                                            // 验证是否是输入参数
-                                            if (n.getName().asString().equals(data.get("name"))) {
-                                                // 封装结果
-                                                Result result = new Result();
-                                                result.setSuccess(true);
-                                                result.setClassName(c.getNameAsString());
-                                                result.setMethodName(m.getNameAsString());
-                                                String keyword = String.format("%s.%s",
-                                                        im.getNameAsString(), method.getNameAsString());
-                                                result.setKeyword(keyword);
-                                                results.add(result);
-                                            }
-                                        });
-                                    }
+                            String right = v.getVariables().get(0).getInitializer().get().toString();
+                            if (v.getVariables().get(0).getType().asString().equals("Statement")) {
+                                methodVar.put("Statement", v.getVariables().get(0).getNameAsString());
+                            }
+                            if (next.getScope().get().toString().equals(globalVar.get("Connection"))) {
+                                if (next.getName().asString().equals("createStatement")) {
+                                    logger.debug("call createStatement method");
                                 }
-                                if (im.getName().asString().equals("getOutputStream")) {
-                                    MethodCallExpr method = (MethodCallExpr) im.getParentNode().get();
-                                    // response.getOutputStream.print();
-                                    // response.getOutputStream.println();
-                                    if (method.getName().asString().equals("print") ||
-                                            method.getName().asString().equals("println")) {
-                                        method.findAll(NameExpr.class).forEach(n -> {
-                                            // 验证是否是输入参数
-                                            if (n.getName().asString().equals(data.get("name"))) {
-                                                // 封装结果
-                                                Result result = new Result();
-                                                result.setSuccess(true);
-                                                result.setClassName(c.getNameAsString());
-                                                result.setMethodName(m.getNameAsString());
-                                                String keyword = String.format("%s.%s",
-                                                        im.getNameAsString(), method.getNameAsString());
-                                                result.setKeyword(keyword);
-                                                results.add(result);
+                                if (next.getName().asString().equals("prepareStatement")) {
+                                    logger.debug("call prepareStatement method");
+                                    return;
+                                }
+                            }
+                            // stat.executeQuery("SELECT ..." + param)
+                            if (next.getScope().get().toString().equals(methodVar.get("Statement"))) {
+                                if (next.getName().asString().equals("executeQuery")) {
+                                    logger.debug("call executeQuery method");
+                                    next.findAll(BinaryExpr.class).forEach(b -> {
+                                        String sql = b.getLeft().toString();
+                                        if (!sql.toUpperCase(Locale.ROOT).contains("SELECT")) {
+                                            return;
+                                        }
+                                        if (!b.getOperator().asString().equals("+")) {
+                                            return;
+                                        }
+                                        // 存在SQL语句拼接
+                                        if (b.getLeft() instanceof BinaryExpr) {
+                                            BinaryExpr sqlLeft = (BinaryExpr) b.getLeft();
+                                            String sqlRight = sqlLeft.getRight().toString();
+                                            // 输入是否可控
+                                            if (!paramVar.containsValue(sqlRight)) {
+                                                return;
                                             }
-                                        });
-                                    }
+                                            logger.debug("find jdbc sql inject");
+                                            Result result = new Result();
+                                            result.setSuccess(true);
+                                            result.setClassName(c.getNameAsString());
+                                            result.setMethodName(m.getNameAsString());
+                                            String keyword = String.format("%s.%s",
+                                                    next.getScope().get().toString(),
+                                                    next.getName().asString());
+                                            result.setKeyword(keyword);
+                                            results.add(result);
+                                        }
+                                    });
                                 }
                             }
                         });

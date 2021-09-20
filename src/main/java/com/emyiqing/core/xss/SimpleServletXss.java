@@ -47,8 +47,8 @@ public class SimpleServletXss {
                             }
                         });
                         // 参数校验
-                        if (params.get("request").equals("") ||
-                                params.get("response").equals("")) {
+                        if (params.get("request") != null && params.get("request").equals("") ||
+                                params.get("response") != null && params.get("response").equals("")) {
                             return;
                         }
                         Map<String, String> data = new HashMap<>();
@@ -76,7 +76,12 @@ public class SimpleServletXss {
                             if (im.getScope().get().toString().equals(params.get("response"))) {
                                 // 如果调用了response.getWriter
                                 if (im.getName().asString().equals("getWriter")) {
-                                    MethodCallExpr method = (MethodCallExpr) im.getParentNode().get();
+                                    MethodCallExpr method;
+                                    if (im.getParentNode().get() instanceof MethodCallExpr) {
+                                        method = (MethodCallExpr) im.getParentNode().get();
+                                    } else {
+                                        return;
+                                    }
                                     // response.getWriter.print();
                                     // response.getWriter.write();
                                     if (method.getName().asString().equals("print") ||
