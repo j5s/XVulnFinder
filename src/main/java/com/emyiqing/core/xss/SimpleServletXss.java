@@ -86,9 +86,9 @@ public class SimpleServletXss {
                                     // response.getWriter.write();
                                     if (method.getName().asString().equals("print") ||
                                             method.getName().asString().equals("write")) {
-                                        method.findAll(NameExpr.class).forEach(n -> {
-                                            // 验证是否是输入参数
-                                            if (n.getName().asString().equals(data.get("name"))) {
+                                        if (method.getChildNodes().size() == 3) {
+                                            String target = method.getChildNodes().get(2).toString();
+                                            if (target.equals(data.get("name"))) {
                                                 // 封装结果
                                                 Result result = new Result();
                                                 result.setSuccess(true);
@@ -99,7 +99,7 @@ public class SimpleServletXss {
                                                 result.setKeyword(keyword);
                                                 results.add(result);
                                             }
-                                        });
+                                        }
                                     }
                                 }
                                 if (im.getName().asString().equals("getOutputStream")) {
@@ -108,9 +108,9 @@ public class SimpleServletXss {
                                     // response.getOutputStream.println();
                                     if (method.getName().asString().equals("print") ||
                                             method.getName().asString().equals("println")) {
-                                        method.findAll(NameExpr.class).forEach(n -> {
-                                            // 验证是否是输入参数
-                                            if (n.getName().asString().equals(data.get("name"))) {
+                                        if (method.getChildNodes().size() == 3) {
+                                            String target = method.getChildNodes().get(2).toString();
+                                            if (target.equals(data.get("name"))) {
                                                 // 封装结果
                                                 Result result = new Result();
                                                 result.setSuccess(true);
@@ -121,7 +121,7 @@ public class SimpleServletXss {
                                                 result.setKeyword(keyword);
                                                 results.add(result);
                                             }
-                                        });
+                                        }
                                     }
                                 }
                             }

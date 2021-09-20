@@ -14,6 +14,7 @@ import java.util.*;
 
 @SuppressWarnings("all")
 public class JdbcSqlInject {
+    // todo: 添加新规则
     private static Logger logger = Logger.getLogger(JdbcSqlInject.class);
 
     private static final String STATEMENT_IMPORT = "java.sql.Statement";
